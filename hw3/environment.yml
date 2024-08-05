@@ -34,5 +34,3 @@ dependencies:
   - torchvision
   - torchtext
 
-platforms:
-  - linux-64

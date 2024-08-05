@@ -250,7 +250,16 @@ class RNNTrainer(Trainer):
         #  - Update params
         #  - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        self.optimizer.zero_grad()
+        y_pred, self.hidden_state = self.model(x, self.hidden_state)
+        self.hidden_state = self.hidden_state.detach()
+        y_pred = y_pred.view(-1, y_pred.size(2))  
+        y = y.view(-1)
+        loss = self.loss_fn(y_pred, y)
+        loss.backward()
+        self.optimizer.step()
+        _, predicted = torch.max(y_pred, 1)
+        num_correct = (predicted == y).sum()
         # ========================
 
         # Note: scaling num_correct by seq_len because each sample has seq_len
