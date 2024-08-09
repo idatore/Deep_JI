@@ -22,14 +22,14 @@ def part1_rnn_hyperparams():
     )
     # TODO: Set the hyperparameters to train the model.
     # ====== YOUR CODE: ======
-    hypers["batch_size"] = 400
-    hypers["seq_len"] = 30
+    hypers["batch_size"] = 256
+    hypers["seq_len"] = 25
     hypers["h_dim"] = 256
     hypers["n_layers"] = 3
-    hypers["dropout"] = 0.25
-    hypers["learn_rate"] = 0.001
+    hypers["dropout"] = 0.1
+    hypers["learn_rate"] = 0.002
     hypers["lr_sched_factor"] = 0.1
-    hypers["lr_sched_patience"] = 5
+    hypers["lr_sched_patience"] = 3
     # ========================
     return hypers
 
@@ -39,28 +39,34 @@ def part1_generation_params():
     temperature = 0.0001
     # TODO: Tweak the parameters to generate a literary masterpiece.
     # ====== YOUR CODE: ======
-    
+    start_seq = "Act I:"
+    temperature = 0.5
     # ========================
     return start_seq, temperature
 
 
 part1_q1 = r"""
-**Your answer:**
+Splitting the corpus into sequences instead of training on the entire text is crucial for memory efficiency and effective learning. Processing the entire text at once would require a vast amount of memory, especially for longer texts, which may not be feasible on typical hardware. By dividing the text into smaller sequences, the model can process these chunks more easily, fitting within memory constraints and enabling batch processing. This approach also helps in stabilizing gradient updates, making the training process more reliable.
 
+Moreover, splitting the text into sequences enhances learning by allowing the model to focus on short term dependencies within each chunk. This is particularly important when using BPTT, as it allows the model to learn temporal dependencies over these sequences effectively. BPTT works well within these smaller chunks, making the optimization process more manageable and computationally feasible.
 """
 
 part1_q2 = r"""
-**Your answer:**
 
+The generated text can show memory longer than the sequence length because RNNs maintain a hidden state that carries information across time steps. This hidden state enables the model to retain context from previous sequences, even when the current sequence is short. Through BPTT, the model learns to use this hidden state to capture dependencies across multiple sequences, allowing it to generate text that reflects earlier parts of the corpus.
 """
 
 part1_q3 = r"""
-**Your answer:**
+We do not shuffle the order of batches when training because maintaining the sequential order of data is crucial for RNN. This model rely on the continuity of the input data to capture temporal dependencies and maintain the context across sequences. Shuffling would disrupt this order, preventing the model from learning meaningful patterns and dependencies within the data.
 
 """
 
 part1_q4 = r"""
-**Your answer:**
+1. Lowering the temperature makes the model's predictions more confident by sharpening the probability distribution. It reduces the likelihood of sampling less probable outcomes, leading to more deterministic and focused text generation.
+
+2. When the temperature is very high, the probability distribution becomes more uniform, making the model more likely to sample from all possible outcomes, including those with low probability. This can result in more random and less coherent text.
+
+3. When the temperature is very low, the probability distribution becomes more peaked, making the model almost always select the most likely outcome. This can lead to repetitive and predictable text, as the model is less likely to explore diverse options
 
 
 """
@@ -72,6 +78,24 @@ part1_q4 = r"""
 
 PART2_CUSTOM_DATA_URL = None
 
+def part3_gan_hyperparams():
+    hypers = dict()
+    hypers["batch_size"] = 128  
+    hypers["z_dim"] = 100  
+    hypers["discriminator_optimizer"] = {
+        "type": "Adam", 
+        "lr": 0.0002,  
+        "betas": (0.5, 0.999)  
+    }
+    hypers["generator_optimizer"] = {
+        "type": "Adam", 
+        "lr": 0.0002, 
+        "betas": (0.5, 0.999)
+    }
+    hypers["data_label"] = 1
+    hypers["label_noise"] = 0.1
+    hypers["data_label"] = 1
+    return hypers
 
 def part2_vae_hyperparams():
     hypers = dict(
