@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import math
-
+import torch.nn.functional as F
 
 
 
@@ -37,7 +37,45 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     ## Think how you can obtain the indices corresponding to the entries in the sliding windows using tensor operations (without loops),
     ## and then use these indices to compute the dot products directly.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    mult_head = False
+    padding = window_size // 2
+    rows = seq_len
+    cols = seq_len + (2*padding)
+
+    if len(q.size()) == 3:
+        mult_head = True
+        k = k.unsqueeze(1) 
+        q = q.unsqueeze(1) 
+    
+    num_heads = q.shape[1]
+    
+    if padding_mask is not None:
+        padding_mask = padding_mask.to(torch.bool)
+        expanded_mask = padding_mask.unsqueeze(1).unsqueeze(3).expand_as(q)
+        q = q.masked_fill(expanded_mask, 0)
+        k = k.masked_fill(expanded_mask, 0)
+        v = v.masked_fill(expanded_mask, 0)
+
+    q = q.view(batch_size*num_heads, seq_len, embed_dim)
+    k = k.view(batch_size*num_heads, seq_len, embed_dim).permute(0, 2, 1)
+
+    attention_weights = torch.matmul(q.unsqueeze(2), torch.nn.functional.pad(k, (padding, padding)).unfold(-1, window_size+1, 1).transpose(1, 2)).squeeze(2)
+    index_diff = torch.arange(cols).unsqueeze(0) - torch.arange(rows).unsqueeze(1)
+    valid_indices = (index_diff >= 0) & (index_diff < window_size + 1)
+    valid_indices = valid_indices.repeat(batch_size * num_heads, 1).view(batch_size * num_heads, seq_len, -1)
+    attention = torch.full((batch_size * num_heads, rows, cols), fill_value=float('-inf'), device=q.device)
+    attention[valid_indices] = attention_weights .flatten()
+    
+    attention = attention[:, :, padding:-padding]
+    attention /= math.sqrt(embed_dim)
+    attention = attention.view(batch_size, num_heads, seq_len, seq_len)
+
+    if mult_head:
+        attention = attention.squeeze(1)
+
+    attention = F.softmax(attention, dim=-1)
+
+    values = torch.matmul(attention, v)
     # ========================
 
 
@@ -84,7 +122,7 @@ class MultiHeadAttention(nn.Module):
         # TODO:
         # call the sliding window attention function you implemented
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        values, attention = sliding_window_attention(q, k, v, self.window_size, padding_mask)
         # ========================
 
         values = values.permute(0, 2, 1, 3) # [Batch, SeqLen, Head, Dims]
