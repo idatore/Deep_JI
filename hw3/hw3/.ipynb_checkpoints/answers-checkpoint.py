@@ -22,7 +22,7 @@ def part1_rnn_hyperparams():
     )
     # TODO: Set the hyperparameters to train the model.
     # ====== YOUR CODE: ======
-    hypers["batch_size"] = 256
+    hypers["batch_size"] = 128
     hypers["seq_len"] = 25
     hypers["h_dim"] = 256
     hypers["n_layers"] = 3
@@ -80,21 +80,23 @@ PART2_CUSTOM_DATA_URL = None
 
 def part3_gan_hyperparams():
     hypers = dict()
-    hypers["batch_size"] = 128  
-    hypers["z_dim"] = 100  
+    hypers["batch_size"] = 32  
+    hypers["z_dim"] = 100
     hypers["discriminator_optimizer"] = {
         "type": "Adam", 
-        "lr": 0.0002,  
+        "lr": 0.0002,
+
         "betas": (0.5, 0.999)  
     }
     hypers["generator_optimizer"] = {
         "type": "Adam", 
-        "lr": 0.0002, 
-        "betas": (0.5, 0.999)
+        "lr": 0.0002,
+        "betas": (0.5, 0.999),
     }
-    hypers["data_label"] = 1
-    hypers["label_noise"] = 0.1
-    hypers["data_label"] = 1
+    
+    hypers["data_label"] = 0
+    hypers["label_noise"] = 0.01
+
     return hypers
 
 def part2_vae_hyperparams():
@@ -159,7 +161,15 @@ def part3_transformer_encoder_hyperparams():
 
     # TODO: Tweak the hyperparameters to train the transformer encoder.
     # ====== YOUR CODE: ======
-    
+
+    #todo jonah - update to work
+    hypers["embed_dim"] = 256
+    hypers["num_heads"] = 4
+    hypers["num_layers"] = 6
+    hypers["hidden_dim"] = 64
+    hypers["window_size"] = 16
+    hypers["dropout"] = 0.2
+    hypers["lr"] = 1e-4
     # ========================
     return hypers
 
