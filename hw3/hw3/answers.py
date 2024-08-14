@@ -80,17 +80,17 @@ PART2_CUSTOM_DATA_URL = None
 
 def part3_gan_hyperparams():
     hypers = dict()
-    hypers["batch_size"] = 32  
+    hypers["batch_size"] = 30  
     hypers["z_dim"] = 100
     hypers["discriminator_optimizer"] = {
         "type": "Adam", 
-        "lr": 0.0002,
+        "lr": 0.00015,
 
         "betas": (0.5, 0.999)  
     }
     hypers["generator_optimizer"] = {
         "type": "Adam", 
-        "lr": 0.0002,
+        "lr": 0.00015,
         "betas": (0.5, 0.999),
     }
     

@@ -270,15 +270,15 @@ def train_batch(
     # dsc_optimizer.step()
     
     fake_img = gen_model.sample(x_data.size(0))
-
-    dsc_optimizer.zero_grad()
-    discr_pred_real = dsc_model(x_data)
-    discr_pred_fake = dsc_model(fake_img.detach())
-
-    dsc_loss = dsc_loss_fn(discr_pred_real, discr_pred_fake)    
+    for _ in range(3):
+        dsc_optimizer.zero_grad()
+        discr_pred_real = dsc_model(x_data)
+        discr_pred_fake = dsc_model(fake_img.detach())
     
-    dsc_loss.backward()
-    dsc_optimizer.step()
+        dsc_loss = dsc_loss_fn(discr_pred_real, discr_pred_fake)    
+        
+        dsc_loss.backward()
+        dsc_optimizer.step()
 
     # ========================
 
@@ -287,7 +287,8 @@ def train_batch(
     #  2. Calculate generator loss
     #  3. Update generator parameters
     # ====== YOUR CODE: ======
-    for _ in range(2):
+    
+    for _ in range(3):
         gen_optimizer.zero_grad()
         fake_img = gen_model.sample(x_data.size(0), True)
     
@@ -331,7 +332,7 @@ def save_checkpoint(gen_model, dsc_losses, gen_losses, checkpoint_file):
     #  You should decide what logic to use for deciding when to save.
     #  If you save, set saved to True.
     # ====== YOUR CODE: ======
-    if len(dsc_losses) <= 10 or dsc_losses[-1] <= max(dsc_losses[-10:-1]):
+    if len(dsc_losses) <= 5 or dsc_losses[-1]/gen_losses[-1] <= max([d / g for d, g in zip(dsc_losses[-5:-1], gen_losses[-5:-1])]):
         return
     # ========================
     torch.save(gen_model, checkpoint_file)
