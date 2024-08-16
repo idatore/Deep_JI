@@ -165,7 +165,7 @@ def part3_transformer_encoder_hyperparams():
     # ====== YOUR CODE: ======
     hypers["embed_dim"] = 120
     hypers["num_heads"] = 6
-    hypers["num_layers"] = 2
+    hypers["num_layers"] = 3
     hypers["hidden_dim"] = 128
     hypers["window_size"] = 32
     hypers["droupout"] = 0.2

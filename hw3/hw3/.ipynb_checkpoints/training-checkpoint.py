@@ -401,17 +401,20 @@ class FineTuningTrainer(Trainer):
         #  fill out the training loop.
         # ====== YOUR CODE: ======
         self.model.train()
+
+        self.optimizer.zero_grad()
+
         outputs = self.model(input_ids, attention_mask=attention_masks, labels=labels)
         logits = outputs.logits
-        self.optimizer.zero_grad()
         loss = outputs.loss
-        loss.backward()
-        predictions = torch.argmax(logits, dim=-1)
-        num_correct = torch.sum(predictions == labels)
 
+        loss.backward()
         self.optimizer.step()
 
-        loss = loss.detach().item() 
+        loss = loss.item()
+
+        predictions = torch.argmax(torch.sigmoid(logits), dim=-1)
+        num_correct = torch.sum(predictions == labels).item()
         
         # ========================
         
@@ -428,11 +431,14 @@ class FineTuningTrainer(Trainer):
             #  fill out the training loop.
             # ====== YOUR CODE: ======
             self.model.eval()
+            
             outputs = self.model(input_ids, attention_mask=attention_masks, labels=labels)
             logits = outputs.logits
             loss = outputs.loss
-            predictions = torch.argmax(logits, dim=-1)
-            num_correct = torch.sum((predictions == labels))
-        loss = loss.detach().item() 
+
+            loss = loss.detach().item() 
+
+            predictions = torch.argmax(torch.sigmoid(logits), dim=-1)
+            num_correct = torch.sum(predictions == labels).item()
             # ========================
         return BatchResult(loss, num_correct)
