@@ -2,6 +2,8 @@ import math
 import numpy as np
 import itertools
 import matplotlib.pyplot as plt
+import torch   # todo jonah - remove (to run on gpu)
+
 
 from .train_results import FitResult
 
@@ -115,6 +117,10 @@ def plot_fit(fit_res: FitResult, fig=None, log_loss=False, legend=None):
         ax = axes[idx]
         attr = f"{traintest}_{lossacc}"
         data = getattr(fit_res, attr)
+
+        if isinstance(data, list): # todo jonah - remove (to run on gpu)
+            data = [item.detach().cpu().numpy() if isinstance(item, torch.Tensor) else item for item in data] # todo jonah - remove (to run on gpu)
+            
         h = ax.plot(np.arange(1, len(data) + 1), data, label=legend)
         ax.set_title(attr)
         if lossacc == "loss":
