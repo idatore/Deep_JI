@@ -355,7 +355,6 @@ class TransformerEncoderTrainer(Trainer):
         predictions = torch.sigmoid(logits)
         rounded_preds = torch.round(predictions)
         
-        # predictions = self.model.predict(input_ids, attention_mask)
         num_correct = torch.sum(rounded_preds == label)
         # ========================
         
@@ -382,7 +381,6 @@ class TransformerEncoderTrainer(Trainer):
             predictions = torch.sigmoid(logits)
             rounded_preds = torch.round(predictions)
             
-            # predictions = self.model.predict(input_ids, attention_mask)
             num_correct = torch.sum(rounded_preds == label)
             # ========================
 

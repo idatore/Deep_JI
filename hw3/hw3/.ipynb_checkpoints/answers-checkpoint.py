@@ -163,39 +163,13 @@ def part3_transformer_encoder_hyperparams():
 
     # TODO: Tweak the hyperparameters to train the transformer encoder.
     # ====== YOUR CODE: ======
-    hypers["embed_dim"] = 120
-    hypers["num_heads"] = 6
-    hypers["num_layers"] = 3
-    hypers["hidden_dim"] = 128
-    hypers["window_size"] = 32
+    hypers["embed_dim"] = 512 
+    hypers["num_heads"] = 4
+    hypers["num_layers"] = 4
+    hypers["hidden_dim"] = 512
+    hypers["window_size"] = 16
     hypers["droupout"] = 0.2
-    hypers["lr"] = 5e-4
-
-    # hypers["embed_dim"] = 90
-    # hypers["num_heads"] = 6
-    # hypers["num_layers"] = 2
-    # hypers["hidden_dim"] = 64
-    # hypers["window_size"] = 16
-    # hypers["droupout"] = 0.1
-    # hypers["lr"] = 5e-4
-
-    # # -----1 back-----
-    # hypers["embed_dim"] = 128
-    # hypers["num_heads"] = 4
-    # hypers["num_layers"] = 3
-    # hypers["hidden_dim"] = 164
-    # hypers["window_size"] = 16
-    # hypers["droupout"] = 0.2
-    # hypers["lr"] = 4e-4
-
-    # -----2 back-----
-    # hypers["embed_dim"] = 128
-    # hypers["num_heads"] = 4
-    # hypers["num_layers"] = 3
-    # hypers["hidden_dim"] = 128
-    # hypers["window_size"] = 16
-    # hypers["droupout"] = 0.2
-    # hypers["lr"] = 2e-4
+    hypers["lr"] = 0.0001
     # ========================
     return hypers
 
