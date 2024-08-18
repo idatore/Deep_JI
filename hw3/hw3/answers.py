@@ -117,14 +117,12 @@ def part2_vae_hyperparams():
 
 part2_q1 = r"""
 **Your answer:**
-Gradients are maintained during the generator training because its parameters need to be updated based on the discriminator's feedback. They are discarded during the discriminator training since we only need to update the discriminator's parameters, and the generator's output is treated as fixed and shouldn’t be trained here.
-
-
+Gradients are maintained during the generator training because the generator's parameters need to be updated based on the discriminator's feedback. This allows the generator to learn how to produce better fake samples that can fool the discriminator. During the discriminator training, gradients are maintained for the discriminator's parameters so they can be updated, but gradients are discarded for the generator's output. The generator's output is treated as fixed and doesn't require gradients because the generator itself is not being trained during this phase.
 """
 
 part2_q2 = r"""
 **Your answer:**
-No, you shouldn't stop training a GAN just because the generator loss is low, as this might not mean the generated images are good. They could be repetitive or of poor quality. 
+No, you shouldn't stop training a GAN just because the generator loss is low, as this might not mean the generated images are good. They could be repetitive or of poor quality. We observed during this part's training process that even when both the generator and discriminator loss were low, it commonly didn't indicate that we succesfully trained the model, and a human-eye was needed to assess the quality and diversity of the generated images.
 If the discriminator loss stays constant while the generator loss drops, it might indicate that the generator is finding tricks to fool the discriminator without truly improving. This could lead to a situation where the GAN isn't creating diverse and improving images, even though the losses seem to suggest progress.
 
 """
@@ -191,7 +189,7 @@ We can expand the context while keeping the computational complexity similar by 
 
 part4_q1 = r"""
 **Your answer:**
-
+The fine-tuned Distil-BERT outperformed the trained-from-scratch encoder due to its pre-trained knowledge and architecture which were optimized for capturing contextual information, making it highly effective for sentiment analysis. However, this advantage may not always hold for every downstream task. In some cases, a model trained from scratch with sufficient data or specific task requirements might perform just as well or even better, depending on the nature of the task. This could especially be the case if the data distribution is very different from the data used during pre-training, making the pre-trained model less succesful.
 
 """
 
@@ -210,7 +208,7 @@ BERT is not directly meant for machine translation because it is an encoder-only
 
 part4_q4 = r"""
 **Your answer:**
-One reason to choose an RNN over a Transformer is its ability to handle tasks requiring strict sequential order, as RNNs process sequences step-by-step, preserving a clear sequence of dependencies between elements. This sequential processing allows RNNs to capture relationships across time steps more naturally, making them particularly effective for tasks like time series analysis or scenarios where the order of inputs significantly influences the output. Additionally, RNNs are simpler and more efficient for smaller datasets or tasks with shorter sequences, where the computational complexity of Transformers may not be necessary.
+One reason to choose an RNN over a Transformer is its ability to handle tasks requiring strict sequential order, as RNNs process sequences step-by-step, preserving a clear sequence of dependencies between elements. This sequential processing allows RNNs to capture relationships across time steps more naturally, making them particularly effective for tasks like time series analysis or scenarios where the order of inputs significantly influences the output. 
 
 """
 
