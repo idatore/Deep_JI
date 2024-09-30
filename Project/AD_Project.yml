@@ -4,6 +4,9 @@ channels:
   - nvidia
   - defaults
 dependencies:
+  - ipython
+  - jupyter
+  - jupyterlab
   - python=3.10.14
   - pytorch=2.4.0
   - pytorch-cuda=12.1

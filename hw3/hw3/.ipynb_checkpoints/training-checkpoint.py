@@ -6,6 +6,9 @@ import torch
 from typing import Any, Callable
 from pathlib import Path
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+from torchvision.utils import make_grid
+
 
 from cs236781.train_results import FitResult, BatchResult, EpochResult
 
@@ -63,73 +66,66 @@ class Trainer(abc.ABC):
         actual_num_epochs = 0
         train_loss, train_acc, test_loss, test_acc = [], [], [], []
 
-        best_acc = None
+        best_loss = None
         epochs_without_improvement = 0
 
-        checkpoint_filename = None
-        if checkpoints is not None:
-            checkpoint_filename = f"{checkpoints}.pt"
-            Path(os.path.dirname(checkpoint_filename)).mkdir(exist_ok=True)
-            if os.path.isfile(checkpoint_filename):
-                print(f"*** Loading checkpoint file {checkpoint_filename}")
-                saved_state = torch.load(checkpoint_filename, map_location=self.device)
-                best_acc = saved_state.get("best_acc", best_acc)
-                epochs_without_improvement = saved_state.get(
-                    "ewi", epochs_without_improvement
-                )
-                self.model.load_state_dict(saved_state["model_state"])
-
+        # checkpoint_filename = None
+        # if checkpoints is not None:
+        #     checkpoint_filename = f"{checkpoints}.pt"
+        #     Path(os.path.dirname(checkpoint_filename)).mkdir(exist_ok=True)
+        #     if os.path.isfile(checkpoint_filename):
+        #         print(f"*** Loading checkpoint file {checkpoint_filename}")
+        #         saved_state = torch.load(checkpoint_filename, map_location=self.device)
+        #         best_acc = saved_state.get("best_acc", best_acc)
+        #         epochs_without_improvement = saved_state.get(
+        #             "ewi", epochs_without_improvement
+        #         )
+        #         self.model.load_state_dict(saved_state["model_state"])
+                
+        self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
+        
         for epoch in range(num_epochs):
             save_checkpoint = False
             verbose = False  # pass this to train/test_epoch.
             if epoch % print_every == 0 or epoch == num_epochs - 1:
                 verbose = True
             self._print(f"--- EPOCH {epoch+1}/{num_epochs} ---", verbose)
-
-            # TODO:
-            #  Train & evaluate for one epoch
-            #  - Use the train/test_epoch methods.
-            #  - Save losses and accuracies in the lists above.
-            #  - Implement early stopping. This is a very useful and
-            #    simple regularization technique that is highly recommended.
-            # ====== YOUR CODE: ======
             
             train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
-            test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
+            # test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
 
             train_loss += train_result.losses
-            train_acc.append(train_result.accuracy)
-            test_loss += test_result.losses
-            test_acc.append(test_result.accuracy)
+            # test_loss += test_result.losses
 
-            actual_num_epochs += 1
-            if best_acc is None or test_result.accuracy > best_acc:
-                save_checkpoint = True
-                best_acc = test_result.accuracy
-                epochs_without_improvement = 0
-            else:
-                epochs_without_improvement += 1
-                if early_stopping and epochs_without_improvement >= early_stopping:
-                    break
+            # actual_num_epochs += 1
+            # if best_loss is None or sum(test_result.losses) < best_loss:
+            #     # save_checkpoint = True
+            #     best_loss = sum(test_result.losses)
+            #     epochs_without_improvement = 0
+            # else:
+            #     epochs_without_improvement += 1
+            #     if early_stopping and epochs_without_improvement >= early_stopping:
+            #         break
                     
             # ========================
 
-            # Save model checkpoint if requested
-            if save_checkpoint and checkpoint_filename is not None:
-                saved_state = dict(
-                    best_acc=best_acc,
-                    ewi=epochs_without_improvement,
-                    model_state=self.model.state_dict(),
-                )
-                torch.save(saved_state, checkpoint_filename)
-                print(
-                    f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
-                )
+            # # Save model checkpoint if requested
+            # if save_checkpoint and checkpoint_filename is not None:
+            #     saved_state = dict(
+            #         best_acc=best_acc,
+            #         ewi=epochs_without_improvement,
+            #         model_state=self.model.state_dict(),
+            #     )
+            #     torch.save(saved_state, checkpoint_filename)
+            #     print(
+            #         f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
+            #     )
 
             if post_epoch_fn:
                 post_epoch_fn(epoch, train_result, test_result, verbose)
 
-        return FitResult(actual_num_epochs, train_loss, train_acc, test_loss, test_acc)
+        # return FitResult(actual_num_epochs, train_loss, train_acc, test_loss, test_acc)
+        return FitResult(actual_num_epochs, train_loss, train_acc)
 
     def train_epoch(self, dl_train: DataLoader, **kw) -> EpochResult:
         """
@@ -149,7 +145,9 @@ class Trainer(abc.ABC):
         :return: An EpochResult for the epoch.
         """
         self.model.train(False)  # set evaluation (test) mode
-        return self._foreach_batch(dl_test, self.test_batch, **kw)
+        latent_vectors = torch.randn(len(dl_test), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True)
+        latent_optimizer = torch.optim.Adam([latent_vectors], lr=0.01)
+        return evaluate_model(self.model, dl_test, latent_optimizer, latent_vectors, 100, self.device)
 
     @abc.abstractmethod
     def train_batch(self, batch) -> BatchResult:
@@ -164,17 +162,6 @@ class Trainer(abc.ABC):
         """
         raise NotImplementedError()
 
-    @abc.abstractmethod
-    def test_batch(self, batch) -> BatchResult:
-        """
-        Runs a single batch forward through the model and calculates loss.
-        :param batch: A single batch of data  from a data loader (might
-            be a tuple of data and labels or anything else depending on
-            the underlying dataset.
-        :return: A BatchResult containing the value of the loss function and
-            the number of correctly classified samples in the batch.
-        """
-        raise NotImplementedError()
 
     @staticmethod
     def _print(message, verbose=True):
@@ -393,8 +380,8 @@ class FineTuningTrainer(Trainer):
     def train_batch(self, batch) -> BatchResult:
         
         input_ids = batch["input_ids"].to(self.device)
-        attention_masks = batch["attention_mask"].to(self.device) # todo jonah - remove device
-        labels= batch["label"].to(self.device) # todo jonah - remove device
+        attention_masks = batch["attention_mask"].to(self.device)
+        labels= batch["label"].to(self.device) 
         # TODO:
         #  fill out the training loop.
         # ====== YOUR CODE: ======
@@ -413,7 +400,7 @@ class FineTuningTrainer(Trainer):
 
         predictions = torch.argmax(torch.sigmoid(logits), dim=-1)
         num_correct = torch.sum(predictions == labels).item()
-        
+
         # ========================
         
         return BatchResult(loss, num_correct)
@@ -421,8 +408,8 @@ class FineTuningTrainer(Trainer):
     def test_batch(self, batch) -> BatchResult:
         
         input_ids = batch["input_ids"].to(self.device)
-        attention_masks = batch["attention_mask"].to(self.device) # todo jonah - remove device
-        labels= batch["label"].to(self.device) # todo jonah - remove device
+        attention_masks = batch["attention_mask"].to(self.device)
+        labels= batch["label"].to(self.device) 
         
         with torch.no_grad():
             # TODO:
@@ -440,3 +427,153 @@ class FineTuningTrainer(Trainer):
             num_correct = torch.sum(predictions == labels).item()
             # ========================
         return BatchResult(loss, num_correct)
+
+
+def reconstruct_imgs(outputs):
+    outputs = (outputs + 1) / 2
+    outputs = outputs * 255
+    # return outputs.clamp(0, 255).byte()
+    return outputs
+
+class DecoderTrainer(Trainer):
+        
+    def train_batch(self, batch) -> BatchResult:
+
+        indices = batch[0].to(self.device).long() 
+        images = batch[1].float().to(self.device)
+        images = images / 255.0
+        
+        for param in self.model.parameters():
+            param.requires_grad = True
+            
+        self.model.train()  
+        self.optimizer.zero_grad()
+
+        outputs = self.model.forward(self.latents[indices]).squeeze(1).to(self.device)
+        
+        # loss = self.loss_fn(reconstruct_imgs(outputs).to(self.device), images)
+        loss = self.loss_fn(outputs, images)
+
+        loss.backward()
+        self.optimizer.step()
+
+        return BatchResult(loss.item(), 0)
+
+    
+    # def test_batch(self, batch) -> BatchResult:
+    #     indices = batch[0].to(self.device)  # Batch of sample indices
+    #     images = batch[1].float().to(self.device)  # Batch of corresponding images
+    #     # images = images / 255.0  # Normalize images to [0, 1] range
+    
+    #     # Freeze decoder parameters to prevent updating them
+    #     for param in self.model.parameters():
+    #         param.requires_grad = False
+    
+    #     # Initialize random latent vectors for test batch
+    #     latent_vectors = torch.randn(len(indices), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True)
+    
+    #     # Define optimizer for latent vectors
+    #     latent_optimizer = torch.optim.Adam([latent_vectors], lr=0.01)
+    
+    #     num_steps = 300 
+    #     epochs_without_improvement = 0
+    #     best_loss = None
+    #     for _ in range(num_steps):
+    #         latent_optimizer.zero_grad()
+    #         outputs = self.model.decoder(latent_vectors).squeeze(1)
+    #         loss = self.loss_fn(outputs, images)
+    #         loss.backward()
+    #         latent_optimizer.step()
+    #         if best_loss is None or loss.item() < best_loss:
+    #             best_loss = loss.item()
+    #             epochs_without_improvement = 0
+    #         else:
+    #             epochs_without_improvement += 1
+    #             if epochs_without_improvement >= 3:
+    #                 break
+    
+    #     return BatchResult(best_loss, 0) 
+    def show_image(self, index):
+        """
+        Given an index or list of indices, reconstruct the image(s) from the latent vector(s)
+        and display them.
+
+        :param index: int or list of ints, index of the latent vector(s)
+        """
+        # Ensure index is a tensor on the correct device and convert to long
+        if isinstance(index, int):
+            indices = torch.tensor([index], device=self.device).long()
+        else:
+            indices = torch.tensor(index, device=self.device).long()
+
+        # Retrieve the latent vector(s)
+        z = self.latents[indices]
+
+        # Pass through the decoder (which is self.model in DecoderTrainer)
+        with torch.no_grad():
+            outputs = self.model(z)
+
+        # Apply sigmoid to bring outputs to [0,1] for visualization (if necessary)
+        outputs = torch.sigmoid(outputs)
+
+        # Move outputs to CPU for visualization
+        images = outputs.cpu()
+
+        # Plot the image(s)
+        if images.shape[0] == 1:
+            # If only one image, squeeze out the extra dimension
+            plt.imshow(images[0].permute(1, 2, 0).squeeze(), cmap='gray' if images.shape[1] == 1 else None)
+            plt.title(f"Reconstructed Image at index {index}")
+            plt.axis('off')
+            plt.show()
+        else:
+            # Create a grid of images if there are multiple images to show
+            grid_img = make_grid(images, nrow=5, normalize=True, value_range=(0, 1))
+            plt.figure(figsize=(12, 6))
+            plt.imshow(grid_img.permute(1, 2, 0).numpy(), cmap='gray' if images.shape[1] == 1 else None)
+            plt.title("Reconstructed Images")
+            plt.axis('off')
+            plt.show()
+
+
+def reconstruction_loss(x, x_rec):
+    """
+    :param x: the original images
+    :param x_rec: the reconstructed images
+    :return: the reconstruction loss
+    """
+    return torch.norm(x - x_rec) / torch.prod(torch.tensor(x.shape))
+    
+def evaluate_model(model, test_dl, opt, latents, epochs, device):
+    """
+    :param model: the trained model
+    :param test_dl: a DataLoader of the test set
+    :param opt: a torch.optim object that optimizes ONLY the test set
+    :param latents: initial values for the latents of the test set
+    :param epochs: how many epochs to train the test set latents for
+    :return:
+    """
+    for epoch in range(epochs):
+        for i, x in test_dl:
+            i = i.to(device)
+            x = x.to(device)
+            x_rec = model(latents[i])
+            loss = reconstruction_loss(x, x_rec)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+    losses = []
+    with torch.no_grad():
+        for i, x in test_dl:
+            i = i.to(device)
+            x = x.to(device)
+            x_rec = model(latents[i])
+            loss = reconstruction_loss(x, x_rec)
+            losses.append(loss.item())
+
+        final_loss = sum(losses) / len(losses)
+
+    return final_loss
+
+

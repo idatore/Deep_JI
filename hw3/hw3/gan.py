@@ -21,13 +21,6 @@ class Discriminator(nn.Module):
         #  You can then use either an affine layer or another conv layer to
         #  flatten the features.
         # ====== YOUR CODE: ======
-
-
-        # self.cnn = autoencoder.EncoderCNN(in_size[0], 512)
-        # self.modules = [*(self.cnn.layers),
-        #                 nn.Flatten(),
-        #                 nn.Linear(self._calc_num_cnn_features(in_size), 1)]              
-        # self.model = nn.Sequential(*self.modules)
     
         self.discriminator = nn.Sequential(
             nn.Conv2d(self.in_size[0], 128, kernel_size=5, stride=2, padding=2),  
@@ -88,14 +81,6 @@ class Generator(nn.Module):
         #  section or implement something new.
         #  You can assume a fixed image size.
         # ====== YOUR CODE: ======
-        # self.decoder = autoencoder.DecoderCNN(in_channels=512, out_channels=out_channels)
-        # self.modules = [
-        #     nn.Linear(z_dim, featuremap_size*featuremap_size*512),
-        #     nn.ReLU(True),
-        #     nn.Unflatten(-1, (512, featuremap_size, featuremap_size)),
-        #     *(self.decoder.layers),
-        #     nn.Tanh()]              
-        # self.model = nn.Sequential(*self.modules)
 
         self.generator = nn.Sequential(
             nn.ConvTranspose2d(z_dim, 1024, kernel_size=4, stride=1, padding=0, bias=False),
@@ -137,14 +122,6 @@ class Generator(nn.Module):
         with torch.set_grad_enabled(with_grad):
             z = torch.randn(n, self.z_dim, 1, 1, device=device)
             samples = self.forward(z)
-
-        # if with_grad:
-        #     z = torch.randn(n, self.z_dim, device=device, requires_grad=True)
-        #     samples = self.forward(z)
-        # else:
-        #     with torch.no_grad():
-        #         z = torch.randn(n, self.z_dim, device=device)
-        #         samples = self.forward(z)
         # ========================
         return samples
 
@@ -158,8 +135,6 @@ class Generator(nn.Module):
         #  Don't forget to make sure the output instances have the same
         #  dynamic range as the original (real) images.
         # ====== YOUR CODE: ======
-        # z = z.view(z.size(0), -1)
-        # x = self.model(z)
         z = z.view(z.size(0), self.z_dim, 1, 1)
         x = self.generator(z)
         # ========================
@@ -187,10 +162,6 @@ def discriminator_loss_fn(y_data, y_generated, data_label=0, label_noise=0.0):
     #  generated labels.
     #  See pytorch's BCEWithLogitsLoss for a numerically stable implementation.
     # ====== YOUR CODE: ======
-    # noisy_real_labels = data_label + label_noise * (torch.rand_like(y_data) - 0.5)
-    # noisy_fake_labels = (1 - data_label) + label_noise * (torch.rand_like(y_generated) - 0.5)
-    # loss_data = F.binary_cross_entropy_with_logits(y_data, noisy_real_labels)
-    # loss_generated = F.binary_cross_entropy_with_logits(y_generated, noisy_fake_labels)
 
     criterion = nn.BCEWithLogitsLoss()
 
@@ -228,8 +199,6 @@ def generator_loss_fn(y_generated, data_label=0):
     #  Think about what you need to compare the input to, in order to
     #  formulate the loss in terms of Binary Cross Entropy.
     # ====== YOUR CODE: ======
-    # target_labels = torch.full_like(y_generated, fill_value=data_label, dtype=torch.float)
-    # loss = F.binary_cross_entropy_with_logits(y_generated, target_labels)
 
     criterion = nn.BCEWithLogitsLoss()
     fake_labels = torch.full(y_generated.shape, fill_value=data_label, dtype=torch.float, device=y_generated.device)
@@ -259,15 +228,6 @@ def train_batch(
     #  2. Calculate discriminator loss
     #  3. Update discriminator parameters
     # ====== YOUR CODE: ======
-
-    # y_data = dsc_model(x_data)
-    # # z = torch.randn(x_data.size(0), gen_model.z_dim, 1, 1, device=x_data.device)
-    # # x_generated = gen_model(z)
-    # x_generated = gen_model.sample(x_data.size(0))
-    # y_generated = dsc_model(x_generated.detach())  
-    # dsc_loss = dsc_loss_fn(y_data, y_generated)
-    # dsc_loss.backward()
-    # dsc_optimizer.step()
     
     fake_img = gen_model.sample(x_data.size(0))
     for _ in range(3):
@@ -298,18 +258,6 @@ def train_batch(
         gen_loss.backward()
         gen_optimizer.step()
 
-
-    # for _ in range(2):
-    #     gen_optimizer.zero_grad()
-    #     # z = torch.randn(x_data.size(0), gen_model.z_dim, 1, 1, device=x_data.device)
-    #     # x_generated = gen_model(z)
-
-    #     x_generated = gen_model.sample(x_data.size(0), True)
-
-    #     y_generated = dsc_model(x_generated)
-    #     gen_loss = gen_loss_fn(y_generated)
-    #     gen_loss.backward()
-    #     gen_optimizer.step()
     # ========================
 
     return dsc_loss.item(), gen_loss.item()
