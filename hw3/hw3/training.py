@@ -69,18 +69,18 @@ class Trainer(abc.ABC):
         best_loss = None
         epochs_without_improvement = 0
 
-        # checkpoint_filename = None
-        # if checkpoints is not None:
-        #     checkpoint_filename = f"{checkpoints}.pt"
-        #     Path(os.path.dirname(checkpoint_filename)).mkdir(exist_ok=True)
-        #     if os.path.isfile(checkpoint_filename):
-        #         print(f"*** Loading checkpoint file {checkpoint_filename}")
-        #         saved_state = torch.load(checkpoint_filename, map_location=self.device)
-        #         best_acc = saved_state.get("best_acc", best_acc)
-        #         epochs_without_improvement = saved_state.get(
-        #             "ewi", epochs_without_improvement
-        #         )
-        #         self.model.load_state_dict(saved_state["model_state"])
+        checkpoint_filename = None
+        if checkpoints is not None:
+            checkpoint_filename = f"{checkpoints}.pt"
+            Path(os.path.dirname(checkpoint_filename)).mkdir(exist_ok=True)
+            if os.path.isfile(checkpoint_filename):
+                print(f"*** Loading checkpoint file {checkpoint_filename}")
+                saved_state = torch.load(checkpoint_filename, map_location=self.device)
+                best_loss = saved_state.get("best_loss", best_loss)
+                epochs_without_improvement = saved_state.get(
+                    "ewi", epochs_without_improvement
+                )
+                self.model.load_state_dict(saved_state["model_state"])
                 
         self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
         
@@ -92,40 +92,39 @@ class Trainer(abc.ABC):
             self._print(f"--- EPOCH {epoch+1}/{num_epochs} ---", verbose)
             
             train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
-            # test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
+            test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
+            print(f"Test Loss {test_result:.3f}")
 
             train_loss += train_result.losses
-            # test_loss += test_result.losses
 
-            # actual_num_epochs += 1
-            # if best_loss is None or sum(test_result.losses) < best_loss:
-            #     # save_checkpoint = True
-            #     best_loss = sum(test_result.losses)
-            #     epochs_without_improvement = 0
-            # else:
-            #     epochs_without_improvement += 1
-            #     if early_stopping and epochs_without_improvement >= early_stopping:
-            #         break
+            actual_num_epochs += 1
+            if best_loss is None or test_result < best_loss:
+                save_checkpoint = True
+                best_loss = test_result
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if early_stopping and epochs_without_improvement >= early_stopping:
+                    break
                     
-            # ========================
 
-            # # Save model checkpoint if requested
-            # if save_checkpoint and checkpoint_filename is not None:
-            #     saved_state = dict(
-            #         best_acc=best_acc,
-            #         ewi=epochs_without_improvement,
-            #         model_state=self.model.state_dict(),
-            #     )
-            #     torch.save(saved_state, checkpoint_filename)
-            #     print(
-            #         f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
-            #     )
+            # Save model checkpoint if requested
+            if save_checkpoint and checkpoint_filename is not None:
+                saved_state = dict(
+                    best_loss=best_loss,
+                    ewi=epochs_without_improvement,
+                    model_state=self.model.state_dict(),
+                )
+                torch.save(saved_state, checkpoint_filename)
+                print(
+                    f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
+                )
 
             if post_epoch_fn:
                 post_epoch_fn(epoch, train_result, test_result, verbose)
 
         # return FitResult(actual_num_epochs, train_loss, train_acc, test_loss, test_acc)
-        return FitResult(actual_num_epochs, train_loss, train_acc)
+        return (actual_num_epochs, train_loss)
 
     def train_epoch(self, dl_train: DataLoader, **kw) -> EpochResult:
         """
@@ -144,8 +143,8 @@ class Trainer(abc.ABC):
         :param kw: Keyword args supported by _foreach_batch.
         :return: An EpochResult for the epoch.
         """
-        self.model.train(False)  # set evaluation (test) mode
-        latent_vectors = torch.randn(len(dl_test), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True)
+        self.model.train(False)  
+        latent_vectors = torch.randn(len(dl_test.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True)
         latent_optimizer = torch.optim.Adam([latent_vectors], lr=0.01)
         return evaluate_model(self.model, dl_test, latent_optimizer, latent_vectors, 100, self.device)
 
@@ -293,142 +292,6 @@ class RNNTrainer(Trainer):
         return BatchResult(loss.item(), num_correct.item() / seq_len)
 
 
-class VAETrainer(Trainer):
-    def train_batch(self, batch) -> BatchResult:
-        x, _ = batch
-        x = x.to(self.device)  # Image batch (N,C,H,W)
-        # TODO: Train a VAE on one batch.
-        # ====== YOUR CODE: ======
-        raise NotImplementedError()
-        # ========================
-
-        return BatchResult(loss.item(), 1 / data_loss.item())
-
-    def test_batch(self, batch) -> BatchResult:
-        x, _ = batch
-        x = x.to(self.device)  # Image batch (N,C,H,W)
-
-        with torch.no_grad():
-            # TODO: Evaluate a VAE on one batch.
-            # ====== YOUR CODE: ======
-            raise NotImplementedError()    
-            # ========================
-
-        return BatchResult(loss.item(), 1 / data_loss.item())
-
-
-class TransformerEncoderTrainer(Trainer):
-    
-    def train_batch(self, batch) -> BatchResult:
-        
-        input_ids = batch['input_ids'].to(self.device)
-        attention_mask = batch['attention_mask'].float().to(self.device)
-        label = batch['label'].float().to(self.device)
-        
-        loss = None
-        num_correct = None
-        # TODO:
-        #  fill out the training loop.
-        # ====== YOUR CODE: ======
-        self.model.train()  
-        self.optimizer.zero_grad()
-
-        logits = self.model.forward(input_ids, attention_mask).squeeze(1)
-        loss = self.loss_fn(logits, label)
-        
-        loss.backward()
-        self.optimizer.step()
-
-        predictions = torch.sigmoid(logits)
-        rounded_preds = torch.round(predictions)
-        
-        num_correct = torch.sum(rounded_preds == label)
-        # ========================
-        
-        return BatchResult(loss.item(), num_correct.item())
-
-    
-    def test_batch(self, batch) -> BatchResult:
-        with torch.no_grad():
-            input_ids = batch['input_ids'].to(self.device)
-            attention_mask = batch['attention_mask'].float().to(self.device)
-            label = batch['label'].float().to(self.device)
-            
-            loss = None
-            num_correct = None
-            
-            # TODO:
-            #  fill out the testing loop.
-            # ====== YOUR CODE: ======
-            self.model.eval()  
-            
-            logits = self.model.forward(input_ids, attention_mask).squeeze(1)
-            loss = self.loss_fn(logits, label)
-
-            predictions = torch.sigmoid(logits)
-            rounded_preds = torch.round(predictions)
-            
-            num_correct = torch.sum(rounded_preds == label)
-            # ========================
-
-        return BatchResult(loss.item(), num_correct.item())
-
-
-
-class FineTuningTrainer(Trainer):
-    
-    def train_batch(self, batch) -> BatchResult:
-        
-        input_ids = batch["input_ids"].to(self.device)
-        attention_masks = batch["attention_mask"].to(self.device)
-        labels= batch["label"].to(self.device) 
-        # TODO:
-        #  fill out the training loop.
-        # ====== YOUR CODE: ======
-        self.model.train()
-
-        self.optimizer.zero_grad()
-
-        outputs = self.model(input_ids, attention_mask=attention_masks, labels=labels)
-        logits = outputs.logits
-        loss = outputs.loss
-
-        loss.backward()
-        self.optimizer.step()
-
-        loss = loss.item()
-
-        predictions = torch.argmax(torch.sigmoid(logits), dim=-1)
-        num_correct = torch.sum(predictions == labels).item()
-
-        # ========================
-        
-        return BatchResult(loss, num_correct)
-        
-    def test_batch(self, batch) -> BatchResult:
-        
-        input_ids = batch["input_ids"].to(self.device)
-        attention_masks = batch["attention_mask"].to(self.device)
-        labels= batch["label"].to(self.device) 
-        
-        with torch.no_grad():
-            # TODO:
-            #  fill out the training loop.
-            # ====== YOUR CODE: ======
-            self.model.eval()
-            
-            outputs = self.model(input_ids, attention_mask=attention_masks, labels=labels)
-            logits = outputs.logits
-            loss = outputs.loss
-
-            loss = loss.detach().item() 
-
-            predictions = torch.argmax(torch.sigmoid(logits), dim=-1)
-            num_correct = torch.sum(predictions == labels).item()
-            # ========================
-        return BatchResult(loss, num_correct)
-
-
 def reconstruct_imgs(outputs):
     outputs = (outputs + 1) / 2
     outputs = outputs * 255
@@ -534,6 +397,32 @@ class DecoderTrainer(Trainer):
             plt.title("Reconstructed Images")
             plt.axis('off')
             plt.show()
+
+    def evaluate_model_util(test_dl, epochs):
+
+        self.test_latents = nn.Parameter(torch.randn(len(test_dl.dataset), self.model.latent_dim, 1, 1, device=self.device))
+        for epoch in range(epochs):
+            for i, x in test_dl:
+                i = i.to(self.device)
+                x = x.to(self.device)
+                x_rec = self.model(self.test_latents[i])
+                loss = reconstruction_loss(x, x_rec)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+    
+        losses = []
+        with torch.no_grad():
+            for i, x in test_dl:
+                i = i.to(device)
+                x = x.to(device)
+                x_rec = model(latents[i])
+                loss = reconstruction_loss(x, x_rec)
+                losses.append(loss.item())
+    
+            final_loss = sum(losses) / len(losses)
+        
+        return final_loss
 
 
 def reconstruction_loss(x, x_rec):
