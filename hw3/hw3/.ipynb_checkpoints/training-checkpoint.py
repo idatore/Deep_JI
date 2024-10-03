@@ -3,6 +3,7 @@ import abc
 import sys
 import tqdm
 import torch
+import torch.nn as nn
 from typing import Any, Callable
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -40,7 +41,8 @@ class DecoderTrainer(abc.ABC):
         best_loss = None
         epochs_without_improvement = 0
         
-        self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
+        self.latents = nn.Parameter(torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True))
+        self.optimizer.add_param_group({'params': self.latents})
         
         checkpoint_filename = None
         if checkpoints is not None:
@@ -230,10 +232,10 @@ class VAD_Trainer(DecoderTrainer):
         latents = self.model.reparameterize(self.latents[indices], labels).to(self.device)
         outputs = self.model(latents).squeeze(1).to(self.device)
         
-        log_var = 2 * torch.log(torch.abs(self.model.sigma[labels]) + 1e-7)      
+        log_var = torch.log(torch.abs(self.model.sigma[labels].pow(2)) + 1e-7)      
         
-        # loss = self.loss_fn(outputs, images, self.model.mu[labels], log_var)
-        loss = reconstruction_loss(outputs, images)
+        loss = self.loss_fn(outputs, images, self.model.mu[labels], log_var)
+        # loss = reconstruction_loss(outputs, images)
         loss.backward()
         self.optimizer.step()
 
@@ -244,8 +246,9 @@ class VAD_Trainer(DecoderTrainer):
             indices = torch.tensor([index], device=self.device).long()
         else:
             indices = torch.tensor(index, device=self.device).long()
-    
-        z = self.latents[indices]
+            
+        labels = self.labels[indices]
+        z = self.model.reparameterize(self.latents[indices], labels)
     
         with torch.no_grad():
             outputs = self.model(z)
