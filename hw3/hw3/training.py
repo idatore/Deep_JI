@@ -13,24 +13,10 @@ from torchvision.utils import make_grid
 from cs236781.train_results import FitResult, BatchResult, EpochResult
 
 
-class Trainer(abc.ABC):
-    """
-    A class abstracting the various tasks of training models.
-
-    Provides methods at multiple levels of granularity:
-    - Multiple epochs (fit)
-    - Single epoch (train_epoch/test_epoch)
-    - Single batch (train_batch/test_batch)
-    """
+class DecoderTrainer(abc.ABC):
 
     def __init__(self, model, loss_fn, optimizer, device="cpu"):
-        """
-        Initialize the trainer.
-        :param model: Instance of the model to train.
-        :param loss_fn: The loss function to evaluate with.
-        :param optimizer: The optimizer to train with.
-        :param device: torch.device to run training on (CPU or GPU).
-        """
+
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -45,30 +31,17 @@ class Trainer(abc.ABC):
         checkpoints: str = None,
         early_stopping: int = None,
         print_every=1,
-        post_epoch_fn=None,
         **kw,
     ) -> FitResult:
-        """
-        Trains the model for multiple epochs with a given training set,
-        and calculates validation loss over a given validation set.
-        :param dl_train: Dataloader for the training set.
-        :param dl_test: Dataloader for the test set.
-        :param num_epochs: Number of epochs to train for.
-        :param checkpoints: Whether to save model to file every time the
-            test set accuracy improves. Should be a string containing a
-            filename without extension.
-        :param early_stopping: Whether to stop training early if there is no
-            test loss improvement for this number of epochs.
-        :param print_every: Print progress every this number of epochs.
-        :param post_epoch_fn: A function to call after each epoch completes.
-        :return: A FitResult object containing train and test losses per epoch.
-        """
+
         actual_num_epochs = 0
         train_loss, train_acc, test_loss, test_acc = [], [], [], []
 
         best_loss = None
         epochs_without_improvement = 0
-
+        
+        self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
+        
         checkpoint_filename = None
         if checkpoints is not None:
             checkpoint_filename = f"{checkpoints}.pt"
@@ -81,91 +54,62 @@ class Trainer(abc.ABC):
                     "ewi", epochs_without_improvement
                 )
                 self.model.load_state_dict(saved_state["model_state"])
-                
-        self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
-        
+
         for epoch in range(num_epochs):
             save_checkpoint = False
-            verbose = False  # pass this to train/test_epoch.
+            verbose = False 
             if epoch % print_every == 0 or epoch == num_epochs - 1:
                 verbose = True
             self._print(f"--- EPOCH {epoch+1}/{num_epochs} ---", verbose)
-            
             train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
             test_result = 0
-            # test_result = self.test_epoch(dl_train, verbose=verbose, **kw)
+            # test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
             # print(f"Test Loss {test_result:.3f}")
 
             train_loss += train_result.losses
 
-            # actual_num_epochs += 1
-            # if best_loss is None or test_result < best_loss:
-            #     save_checkpoint = True
-            #     best_loss = test_result
-            #     epochs_without_improvement = 0
-            # else:
-            #     epochs_without_improvement += 1
-            #     if early_stopping and epochs_without_improvement >= early_stopping:
-            #         break
+            actual_num_epochs += 1
+            if best_loss is None or test_result < best_loss:
+                save_checkpoint = True
+                best_loss = test_result
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if early_stopping and epochs_without_improvement >= early_stopping:
+                    break
                     
 
-            # # Save model checkpoint if requested
-            # if save_checkpoint and checkpoint_filename is not None:
-            #     saved_state = dict(
-            #         best_loss=best_loss,
-            #         ewi=epochs_without_improvement,
-            #         model_state=self.model.state_dict(),
-            #     )
-            #     torch.save(saved_state, checkpoint_filename)
-            #     print(
-            #         f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
-            #     )
+            if save_checkpoint and checkpoint_filename is not None:
+                saved_state = dict(
+                    best_loss=best_loss,
+                    ewi=epochs_without_improvement,
+                    model_state=self.model.state_dict(),
+                )
+                torch.save(saved_state, checkpoint_filename)
+                print(
+                    f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
+                )
 
-            if post_epoch_fn:
-                post_epoch_fn(epoch, train_result, test_result, verbose)
 
-        # return FitResult(actual_num_epochs, train_loss, train_acc, test_loss, test_acc)
         return (actual_num_epochs, train_loss)
 
     def train_epoch(self, dl_train: DataLoader, **kw) -> EpochResult:
-        """
-        Train once over a training set (single epoch).
-        :param dl_train: DataLoader for the training set.
-        :param kw: Keyword args supported by _foreach_batch.
-        :return: An EpochResult for the epoch.
-        """
-        self.model.train(True)  # set train mode
+        self.model.train(True)
         return self._foreach_batch(dl_train, self.train_batch, **kw)
 
     def test_epoch(self, dl_test: DataLoader, **kw) -> EpochResult:
-        """
-        Evaluate model once over a test set (single epoch).
-        :param dl_test: DataLoader for the test set.
-        :param kw: Keyword args supported by _foreach_batch.
-        :return: An EpochResult for the epoch.
-        """
         self.model.train(False)  
         latent_vectors = torch.randn(len(dl_test.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True)
         latent_optimizer = torch.optim.Adam([latent_vectors], lr=0.1)
-        return evaluate_model(self.model, dl_test, latent_optimizer, latent_vectors, 100, self.device)
+        return evaluate_model(self.model, dl_test, latent_optimizer, latent_vectors, 25, self.device)
 
     @abc.abstractmethod
     def train_batch(self, batch) -> BatchResult:
-        """
-        Runs a single batch forward through the model, calculates loss,
-        preforms back-propagation and uses the optimizer to update weights.
-        :param batch: A single batch of data  from a data loader (might
-            be a tuple of data and labels or anything else depending on
-            the underlying dataset.
-        :return: A BatchResult containing the value of the loss function and
-            the number of correctly classified samples in the batch.
-        """
         raise NotImplementedError()
 
 
     @staticmethod
     def _print(message, verbose=True):
-        """ Simple wrapper around print to make it conditional """
         if verbose:
             print(message)
 
@@ -176,10 +120,6 @@ class Trainer(abc.ABC):
         verbose=True,
         max_batches=None,
     ) -> EpochResult:
-        """
-        Evaluates the given forward-function on batches from the given
-        dataloader, and prints progress along the way.
-        """
         losses = []
         num_correct = 0
         num_samples = len(dl.sampler)
@@ -216,23 +156,14 @@ class Trainer(abc.ABC):
         accuracy = 0
         return EpochResult(losses=losses, accuracy=accuracy)
 
-def reconstruct_imgs(outputs):
-    outputs = (outputs + 1) / 2
-    outputs = outputs * 255
-    # return outputs.clamp(0, 255).byte()
-    return outputs
 
-class DecoderTrainer(Trainer):
+class AutoDecoderTrainer(DecoderTrainer):
         
     def train_batch(self, batch) -> BatchResult:
 
         indices = batch[0].to(self.device).long() 
         images = batch[1].float().to(self.device)
-        # images = images / 255.0
         
-        for param in self.model.parameters():
-            param.requires_grad = True
-            
         self.model.train()  
         self.optimizer.zero_grad()
 
@@ -245,31 +176,19 @@ class DecoderTrainer(Trainer):
 
         return BatchResult(loss.item(), 0)
 
-
     def show_image(self, index):
-        """
-        Given an index or list of indices, reconstruct the image(s) from the latent vector(s)
-        and display them.
-    
-        :param index: int or list of ints, index of the latent vector(s)
-        """
-        # Ensure index is a tensor on the correct device and convert to long
         if isinstance(index, int):
             indices = torch.tensor([index], device=self.device).long()
         else:
             indices = torch.tensor(index, device=self.device).long()
     
-        # Retrieve the latent vector(s)
         z = self.latents[indices]
     
-        # Pass through the decoder (which is self.model in DecoderTrainer)
         with torch.no_grad():
             outputs = self.model(z)
     
-        # Move outputs to CPU for visualization
         images = outputs.cpu()
     
-        # images = images.squeeze(1)  # Remove channel dimension for grayscale
         if images.shape[0] == 1:
             plt.imshow(images[0], cmap='gray')
         else:
@@ -283,31 +202,67 @@ class DecoderTrainer(Trainer):
         plt.show()
 
 
-    def evaluate_model_util(test_dl, epochs):
+class VAD_Trainer(DecoderTrainer):
+    def fit(
+        self,
+        dl_train: DataLoader,
+        dl_test: DataLoader,
+        num_epochs,
+        checkpoints: str = None,
+        early_stopping: int = None,
+        print_every=1,
+        **kw,
+    ) -> FitResult:
 
-        self.test_latents = nn.Parameter(torch.randn(len(test_dl.dataset), self.model.latent_dim, 1, 1, device=self.device))
-        for epoch in range(epochs):
-            for i, x in test_dl:
-                i = i.to(self.device)
-                x = x.to(self.device)
-                x_rec = self.model(self.test_latents[i])
-                loss = reconstruction_loss(x, x_rec)
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
-    
-        losses = []
-        with torch.no_grad():
-            for i, x in test_dl:
-                i = i.to(device)
-                x = x.to(device)
-                x_rec = model(latents[i])
-                loss = reconstruction_loss(x, x_rec)
-                losses.append(loss.item())
-    
-            final_loss = sum(losses) / len(losses)
+        self.labels = dl_train.dataset.y.to(self.device)
+
+        return super().fit(dl_train, dl_test, num_epochs, checkpoints, early_stopping, print_every, **kw)
+
+    def train_batch(self, batch) -> BatchResult:
         
-        return final_loss
+        indices = batch[0].long().to(self.device)
+        images = batch[1].float().to(self.device)
+        labels = self.labels[indices].to(self.device)
+
+        self.model.train()  
+        self.optimizer.zero_grad()
+
+        latents = self.model.reparameterize(self.latents[indices], labels).to(self.device)
+        outputs = self.model(latents).squeeze(1).to(self.device)
+        
+        log_var = 2 * torch.log(torch.abs(self.model.sigma[labels]) + 1e-7)      
+        
+        # loss = self.loss_fn(outputs, images, self.model.mu[labels], log_var)
+        loss = reconstruction_loss(outputs, images)
+        loss.backward()
+        self.optimizer.step()
+
+        return BatchResult(loss.item(), 0)
+
+    def show_image(self, index):
+        if isinstance(index, int):
+            indices = torch.tensor([index], device=self.device).long()
+        else:
+            indices = torch.tensor(index, device=self.device).long()
+    
+        z = self.latents[indices]
+    
+        with torch.no_grad():
+            outputs = self.model(z)
+    
+        images = outputs.cpu()
+    
+        if images.shape[0] == 1:
+            plt.imshow(images[0], cmap='gray')
+        else:
+            grid_img = make_grid(images.unsqueeze(1), nrow=5, normalize=True, value_range=(0, 1))
+            plt.figure(figsize=(12, 6))
+            plt.imshow(grid_img.permute(1, 2, 0).numpy(), cmap='gray')
+
+    
+        plt.title(f"Reconstructed Image(s) at index {index}")
+        plt.axis('off')
+        plt.show()
 
 
 def reconstruction_loss(x, x_rec):
@@ -349,5 +304,6 @@ def evaluate_model(model, test_dl, opt, latents, epochs, device):
         final_loss = sum(losses) / len(losses)
 
     return final_loss
+
 
 
