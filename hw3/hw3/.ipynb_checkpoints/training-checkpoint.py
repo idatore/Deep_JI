@@ -34,7 +34,7 @@ class DecoderTrainer(abc.ABC):
         print_every=1,
         **kw,
     ) -> FitResult:
-
+        self.num_epochs = num_epochs
         actual_num_epochs = 0
         train_loss, train_acc, test_loss, test_acc = [], [], [], []
 
@@ -46,13 +46,7 @@ class DecoderTrainer(abc.ABC):
             {'params': self.model.decoder.parameters(), 'lr': 0.001},
             {'params': [self.model.mu, self.model.sigma], 'lr': 0.01}
         ])
-        # self.latents = nn.Parameter(torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True))
-        # self.optimizer.add_param_group({'params': self.latents})
-        # self.optimizer = torch.optim.Adam([
-        #     {'params': self.model.decoder.parameters(), 'lr': 0.001},
-        #     {'params': [self.model.mu, self.model.sigma], 'lr': 0.01},
-        #     {'params': [self.latents], 'lr': 0.00001}
-        # ])
+
         checkpoint_filename = None
         if checkpoints is not None:
             checkpoint_filename = f"{checkpoints}.pt"
@@ -67,6 +61,7 @@ class DecoderTrainer(abc.ABC):
                 self.model.load_state_dict(saved_state["model_state"])
 
         for epoch in range(num_epochs):
+            self.epoch = epoch
             save_checkpoint = False
             verbose = False 
             if epoch % print_every == 0 or epoch == num_epochs - 1:
@@ -242,8 +237,10 @@ class VAD_Trainer(DecoderTrainer):
         outputs = self.model(latents).squeeze(1).to(self.device)
 
         sigma_sq = self.model.sigma[labels].pow(2)
+        sigma_sq = torch.clamp(sigma_sq, min=1e-6)
         mu_sq = self.model.mu[labels].pow(2)
-        loss = self.loss_fn(outputs, images, mu_sq, sigma_sq)
+        beta = min(1.0, (self.epoch + 1) / self.num_epochs) * 0.0001
+        loss = self.loss_fn(outputs, images, mu_sq, sigma_sq, beta)
         
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
