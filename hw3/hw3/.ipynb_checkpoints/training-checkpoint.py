@@ -40,10 +40,19 @@ class DecoderTrainer(abc.ABC):
 
         best_loss = None
         epochs_without_improvement = 0
-        
-        self.latents = nn.Parameter(torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True))
-        self.optimizer.add_param_group({'params': self.latents})
-        
+
+        self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
+        self.optimizer = torch.optim.Adam([
+            {'params': self.model.decoder.parameters(), 'lr': 0.001},
+            {'params': [self.model.mu, self.model.sigma], 'lr': 0.01}
+        ])
+        # self.latents = nn.Parameter(torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True))
+        # self.optimizer.add_param_group({'params': self.latents})
+        # self.optimizer = torch.optim.Adam([
+        #     {'params': self.model.decoder.parameters(), 'lr': 0.001},
+        #     {'params': [self.model.mu, self.model.sigma], 'lr': 0.01},
+        #     {'params': [self.latents], 'lr': 0.00001}
+        # ])
         checkpoint_filename = None
         if checkpoints is not None:
             checkpoint_filename = f"{checkpoints}.pt"
@@ -91,7 +100,6 @@ class DecoderTrainer(abc.ABC):
                 print(
                     f"*** Saved checkpoint {checkpoint_filename} " f"at epoch {epoch+1}"
                 )
-
 
         return (actual_num_epochs, train_loss)
 
@@ -204,6 +212,7 @@ class AutoDecoderTrainer(DecoderTrainer):
         plt.show()
 
 
+
 class VAD_Trainer(DecoderTrainer):
     def fit(
         self,
@@ -231,12 +240,13 @@ class VAD_Trainer(DecoderTrainer):
 
         latents = self.model.reparameterize(self.latents[indices], labels).to(self.device)
         outputs = self.model(latents).squeeze(1).to(self.device)
+
+        sigma_sq = self.model.sigma[labels].pow(2)
+        mu_sq = self.model.mu[labels].pow(2)
+        loss = self.loss_fn(outputs, images, mu_sq, sigma_sq)
         
-        log_var = torch.log(torch.abs(self.model.sigma[labels].pow(2)) + 1e-7)      
-        
-        loss = self.loss_fn(outputs, images, self.model.mu[labels], log_var)
-        # loss = reconstruction_loss(outputs, images)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
         self.optimizer.step()
 
         return BatchResult(loss.item(), 0)
@@ -264,6 +274,27 @@ class VAD_Trainer(DecoderTrainer):
 
     
         plt.title(f"Reconstructed Image(s) at index {index}")
+        plt.axis('off')
+        plt.show()
+
+    def show_image_sample(self, label):
+    
+        z = self.model.sample(label)
+    
+        with torch.no_grad():
+            outputs = self.model(z)
+    
+        images = outputs.cpu()
+    
+        if images.shape[0] == 1:
+            plt.imshow(images[0], cmap='gray')
+        else:
+            grid_img = make_grid(images.unsqueeze(1), nrow=5, normalize=True, value_range=(0, 1))
+            plt.figure(figsize=(12, 6))
+            plt.imshow(grid_img.permute(1, 2, 0).numpy(), cmap='gray')
+
+    
+        plt.title(f"Sampled Image(s) of class {label}")
         plt.axis('off')
         plt.show()
 
