@@ -239,7 +239,8 @@ class VAD_Trainer(DecoderTrainer):
         sigma_sq = self.model.sigma[labels].pow(2)
         sigma_sq = torch.clamp(sigma_sq, min=1e-6)
         mu_sq = self.model.mu[labels].pow(2)
-        beta = min(1.0, (self.epoch + 1) / self.num_epochs) * 0.0001
+        # beta = min(1.0, (self.epoch + 1) / self.num_epochs)
+        beta = 0
         loss = self.loss_fn(outputs, images, mu_sq, sigma_sq, beta)
         
         loss.backward()
