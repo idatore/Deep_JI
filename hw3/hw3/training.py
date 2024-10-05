@@ -43,8 +43,8 @@ class DecoderTrainer(abc.ABC):
 
         self.latents = torch.randn(len(dl_train.dataset), self.model.latent_dim, 1, 1, device=self.device)
         self.optimizer = torch.optim.Adam([
-            {'params': self.model.decoder.parameters(), 'lr': 0.001},
-            {'params': [self.model.mu, self.model.sigma], 'lr': 0.01}
+            {'params': self.model.decoder.parameters(), 'lr': 0.01},
+            {'params': [self.model.mu, self.model.sigma], 'lr': 0.001}
         ])
 
         checkpoint_filename = None
@@ -106,7 +106,7 @@ class DecoderTrainer(abc.ABC):
         self.model.train(False)  
         latent_vectors = torch.randn(len(dl_test.dataset), self.model.latent_dim, 1, 1, device=self.device, requires_grad=True)
         latent_optimizer = torch.optim.Adam([latent_vectors], lr=0.1)
-        return evaluate_model(self.model, dl_test, latent_optimizer, latent_vectors, 25, self.device)
+        return evaluate_model(self.model, dl_test, latent_optimizer, latent_vectors, 50, self.device)
 
     @abc.abstractmethod
     def train_batch(self, batch) -> BatchResult:
@@ -238,10 +238,12 @@ class VAD_Trainer(DecoderTrainer):
 
         sigma_sq = self.model.sigma[labels].pow(2)
         sigma_sq = torch.clamp(sigma_sq, min=1e-6)
-        mu_sq = self.model.mu[labels].pow(2)
-        # beta = min(1.0, (self.epoch + 1) / self.num_epochs)
-        beta = 0
-        loss = self.loss_fn(outputs, images, mu_sq, sigma_sq, beta)
+        mu = self.model.mu[labels]
+        mu_p = self.model.mu_p[labels]
+        beta = min(1.0, (self.epoch + 1) / self.num_epochs)
+        # beta = 0
+    
+        loss = self.loss_fn(outputs, images, mu, mu_p, sigma_sq, beta)
         
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
